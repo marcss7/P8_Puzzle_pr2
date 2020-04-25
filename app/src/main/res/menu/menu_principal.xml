@@ -4,4 +4,7 @@
     <item android:id="@+id/ayuda"
         android:title="Ayuda"
         app:showAsAction="never" />
+    <item android:id="@+id/selector_musica"
+        android:title="Selector audio"
+        app:showAsAction="never" />
 </menu>

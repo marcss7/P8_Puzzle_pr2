@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
+import android.app.Activity;
 import android.content.ComponentName;
 import android.content.ContentValues;
 import android.content.Context;
@@ -11,9 +12,11 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.database.sqlite.SQLiteDatabase;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.PowerManager;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -37,6 +40,8 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
     private static final int SECOND_ACTIVITY_REQUEST_CODE = 0;
     private static final int NIVELES = 5;
     HomeWatcher mHomeWatcher;
+    private static final int READ_REQUEST_CODE = 42;
+    public static final String Broadcast_PLAY_NEW_AUDIO = "edu.uoc.resolvers";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -108,7 +113,7 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
     // Asociamos el servicio de música
     private boolean mIsBound = false;
     private ServicioMusica mServ;
-    private ServiceConnection Scon =new ServiceConnection(){
+    private ServiceConnection Scon = new ServiceConnection(){
 
         public void onServiceConnected(ComponentName name, IBinder
                 binder) {
@@ -152,8 +157,56 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
                 Intent ayuda = new Intent(this, ActividadAyuda.class);
                 startActivity(ayuda);
                 return true;
+            case R.id.selector_musica:
+                // Se abre el selector de música
+                performFileSearch();
+                return true;
             default:
                 return super.onOptionsItemSelected(item);
+        }
+    }
+
+    /**
+     * Fires an intent to spin up the "file chooser" UI and select an image.
+     */
+    public void performFileSearch() {
+        // ACTION_OPEN_DOCUMENT is the intent to choose a file via the system's file
+        // browser.
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+
+        // Filter to only show results that can be "opened", such as a
+        // file (as opposed to a list of contacts or timezones)
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+
+        // Filter to show only images, using the image MIME data type.
+        // If one wanted to search for ogg vorbis files, the type would be "audio/ogg".
+        // To search for all documents available via installed storage providers,
+        // it would be "*/*".
+        intent.setType("*/*");
+
+        startActivityForResult(intent, READ_REQUEST_CODE);
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent resultData) {
+
+        // The ACTION_OPEN_DOCUMENT intent was sent with the request code
+        // READ_REQUEST_CODE. If the request code seen here doesn't match, it's the
+        // response to some other intent, and the code below shouldn't run at all.
+
+        super.onActivityResult(requestCode, resultCode, resultData);
+        if (requestCode == READ_REQUEST_CODE && resultCode == Activity.RESULT_OK) {
+            // The document selected by the user won't be returned in the intent.
+            // Instead, a URI to that document will be contained in the return intent
+            // provided to this method as a parameter.
+            // Pull that URI using resultData.getData().
+            Uri uri = null;
+            if (resultData != null) {
+                uri = resultData.getData();
+                ServicioMusica.audioUri = uri;
+                Intent broadcastIntent = new Intent(Broadcast_PLAY_NEW_AUDIO);
+                sendBroadcast(broadcastIntent);
+            }
         }
     }
 
@@ -225,7 +278,7 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
         }
     }
 
-    // Este métodod desasocia el servicio de música cuando no lo necesitamos
+    // Este método desasocia el servicio de música cuando no lo necesitamos
     @Override
     protected void onDestroy() {
         super.onDestroy();

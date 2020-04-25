@@ -1,9 +1,13 @@
 package edu.uoc.resolvers;
 
 import android.app.Service;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
+import android.net.Uri;
 import android.os.Binder;
 import android.os.IBinder;
 import android.widget.Toast;
@@ -13,6 +17,7 @@ public class ServicioMusica extends Service implements MediaPlayer.OnErrorListen
     private final IBinder mBinder = new ServiceBinder();
     MediaPlayer mPlayer;
     private int length = 0;
+    public static Uri audioUri;
 
     public ServicioMusica() {
     }
@@ -32,14 +37,19 @@ public class ServicioMusica extends Service implements MediaPlayer.OnErrorListen
     public void onCreate() {
         super.onCreate();
 
-        mPlayer = MediaPlayer.create(this, R.raw.solve_the_puzzle);
+        // mPlayer = MediaPlayer.create(this, R.raw.solve_the_puzzle);
+        if (audioUri != null) {
+            mPlayer = MediaPlayer.create(this, audioUri);
+        } else {
+            mPlayer = MediaPlayer.create(this, R.raw.solve_the_puzzle);
+        }
+
         mPlayer.setOnErrorListener(this);
 
         if (mPlayer != null) {
             mPlayer.setLooping(true);
             mPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
         }
-
 
         mPlayer.setOnErrorListener(new MediaPlayer.OnErrorListener() {
 
@@ -50,6 +60,7 @@ public class ServicioMusica extends Service implements MediaPlayer.OnErrorListen
                 return true;
             }
         });
+        register_playNewAudio();
     }
 
     @Override
@@ -79,7 +90,12 @@ public class ServicioMusica extends Service implements MediaPlayer.OnErrorListen
     }
 
     public void startMusic() {
-        mPlayer = MediaPlayer.create(this, R.raw.solve_the_puzzle);
+        if (audioUri != null) {
+            mPlayer = MediaPlayer.create(this, audioUri);
+        } else {
+            mPlayer = MediaPlayer.create(this, R.raw.solve_the_puzzle);
+        }
+        //mPlayer = MediaPlayer.create(this, R.raw.solve_the_puzzle);
         mPlayer.setOnErrorListener(this);
 
         if (mPlayer != null) {
@@ -109,10 +125,10 @@ public class ServicioMusica extends Service implements MediaPlayer.OnErrorListen
                 mPlayer = null;
             }
         }
+        unregisterReceiver(playNewAudio);
     }
 
     public boolean onError(MediaPlayer mp, int what, int extra) {
-
         Toast.makeText(this, "Error en reproductor", Toast.LENGTH_SHORT).show();
         if (mPlayer != null) {
             try {
@@ -123,5 +139,21 @@ public class ServicioMusica extends Service implements MediaPlayer.OnErrorListen
             }
         }
         return false;
+    }
+
+    private BroadcastReceiver playNewAudio = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            //A PLAY_NEW_AUDIO action received
+            //reset mediaPlayer to play the new Audio
+            stopMusic();
+            startMusic();
+        }
+    };
+
+    private void register_playNewAudio() {
+        //Register playNewMedia receiver
+        IntentFilter filter = new IntentFilter(ActividadPrincipal.Broadcast_PLAY_NEW_AUDIO);
+        registerReceiver(playNewAudio, filter);
     }
 }
