@@ -3,27 +3,36 @@ package edu.uoc.resolvers;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
 
 import android.app.Activity;
 import android.content.ComponentName;
+import android.content.ContentResolver;
+import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.PowerManager;
+import android.provider.CalendarContract;
+import android.text.format.DateUtils;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.widget.Toast;
 
+import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
 
 /*
@@ -65,6 +74,7 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
                     mServ.pauseMusic();
                 }
             }
+
             @Override
             public void onHomeLongPressed() {
                 if (mServ != null) {
@@ -92,6 +102,8 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
                 tDelta = tFin - tInicio;
                 segTranscurridos = tDelta / 1000.0;
 
+                agregarEventoCalendario(numCortes - 1, segTranscurridos);
+
                 // Obtenemos la BBDD
                 SQLiteDatabase db = dbHelper.getWritableDatabase();
 
@@ -110,6 +122,79 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
                 pl.postDelayed(ActividadPrincipal.this, 3000);
             }
         });
+    }
+
+    private void agregarEventoCalendario(int nivel, double tiempo) {
+        if (recurperarPuntuacionesCalendario(nivel, tiempo)) {
+            long fecha_record = System.currentTimeMillis();
+            ContentResolver cr = getContentResolver();
+            ContentValues values = new ContentValues();
+            values.put(CalendarContract.Events.DTSTART, fecha_record);
+            values.put(CalendarContract.Events.DTEND, fecha_record);
+            values.put(CalendarContract.Events.TITLE, "TR - ¡Nuevo récord N" + nivel + "!");
+            values.put(CalendarContract.Events.DESCRIPTION, String.format("%.2f", tiempo).replace(".", ","));
+            values.put(CalendarContract.Events.CALENDAR_ID, 3);
+            values.put(CalendarContract.Events.EVENT_TIMEZONE, "Confinado");
+            if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
+                // TODO: Consider calling
+                //    ActivityCompat#requestPermissions
+                // here to request the missing permissions, and then overriding
+                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                //                                          int[] grantResults)
+                // to handle the case where the user grants the permission. See the documentation
+                // for ActivityCompat#requestPermissions for more details.
+                return;
+            }
+            Uri uri = cr.insert(CalendarContract.Events.CONTENT_URI, values);
+        }
+    }
+
+    private boolean recurperarPuntuacionesCalendario(int nivel, double tiempo) {
+        ContentResolver contentResolver = getContentResolver();
+            Uri.Builder builder = CalendarContract.Instances.CONTENT_URI.buildUpon();
+
+            Calendar beginTime = Calendar.getInstance();
+            beginTime.set(2000, Calendar.JANUARY, 1, 0, 0);
+            long startMills = beginTime.getTimeInMillis();
+            long endMills = System.currentTimeMillis();
+
+            ContentUris.appendId(builder, startMills);
+            ContentUris.appendId(builder, endMills);
+            String[] args = new String[]{"3"};
+
+            Cursor eventCursor = contentResolver.query(builder.build(), new String[]{CalendarContract.Instances.TITLE,
+                            CalendarContract.Instances.BEGIN, CalendarContract.Instances.END, CalendarContract.Instances.DESCRIPTION},
+                    CalendarContract.Instances.CALENDAR_ID + " = ?", args, null);
+
+            boolean isRecord = false;
+            boolean hayRegistros = false;
+
+            while (eventCursor.moveToNext()) {
+                final String title = eventCursor.getString(0);
+                final Date begin = new Date(eventCursor.getLong(1));
+                final Date end = new Date(eventCursor.getLong(2));
+                final String description = eventCursor.getString(3);
+
+                //Log.i("Nivel", Integer.toString(title.length()));
+
+                if (title.length() == 22 && title.substring(title.length() - 2, title.length() - 1).equals(Integer.toString(nivel))) {
+                    hayRegistros = true;
+                    if (tiempo < Double.parseDouble(description.replace(",", "."))) {
+                        isRecord = true;
+                    } else {
+                        isRecord = false;
+                    }
+                }
+                //Log.i("Cursor", "Title: " + title + "\tDescription: " + description + "\tBegin: " + begin + "\tEnd: " + end);
+            }
+
+            //Log.i("Record", Boolean.toString(isRecord));
+            if (hayRegistros) {
+                return isRecord;
+            } else {
+                return !isRecord;
+            }
+
     }
 
     // Asociamos el servicio de música

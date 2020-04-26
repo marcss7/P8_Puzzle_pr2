@@ -3,17 +3,26 @@ package edu.uoc.resolvers;
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.content.ComponentName;
+import android.content.ContentResolver;
+import android.content.ContentUris;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.PowerManager;
+import android.provider.CalendarContract;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
+
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
 
 /*
     Esta clase representa la pantalla de bienvenida.
@@ -21,6 +30,9 @@ import android.widget.TextView;
 public class ActividadInicio extends AppCompatActivity {
 
     HomeWatcher mHomeWatcher;
+    private String patronFecha = "dd/MM/yyyy";
+    private SimpleDateFormat sdf;
+    private String fechaActual;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,7 +74,7 @@ public class ActividadInicio extends AppCompatActivity {
 
         TextView puntuaciones = findViewById(R.id.puntuaciones);
 
-        BBDDHelper dbHelper = new BBDDHelper(this);
+/*        BBDDHelper dbHelper = new BBDDHelper(this);
         SQLiteDatabase db = dbHelper.getReadableDatabase();
 
         // Construimos la consulta a la BBDD
@@ -86,7 +98,52 @@ public class ActividadInicio extends AppCompatActivity {
         while(cursor.moveToNext()) {
             puntuaciones.append(cursor.getString(1) + "     " + cursor.getString(0) + " " + String.format("%.2f", cursor.getDouble(2)).replace(".", ",") +  "\n");
         }
-        cursor.close();
+        cursor.close();*/
+
+        obtenerPuntuaciones(puntuaciones);
+    }
+
+    private void obtenerPuntuaciones(TextView puntuaciones) {
+        for (int i = 0; i < 2; i++) {
+            ContentResolver contentResolver = getContentResolver();
+            Uri.Builder builder = CalendarContract.Instances.CONTENT_URI.buildUpon();
+
+            Calendar beginTime = Calendar.getInstance();
+            beginTime.set(2000, Calendar.JANUARY, 1, 0, 0);
+            long startMills = beginTime.getTimeInMillis();
+            long endMills = System.currentTimeMillis();
+
+            String titulo = "TR - ¡Nuevo récord N" + Integer.toString(i + 1) + "!";
+            ContentUris.appendId(builder, startMills);
+            ContentUris.appendId(builder, endMills);
+            String[] args = new String[]{"3", titulo};
+
+            Cursor eventCursor = contentResolver.query(builder.build(), new String[]{CalendarContract.Instances.TITLE,
+                            CalendarContract.Instances.BEGIN, CalendarContract.Instances.END, CalendarContract.Instances.DESCRIPTION},
+                    CalendarContract.Instances.CALENDAR_ID + " = ? AND " + CalendarContract.Instances.TITLE + " = ?", args, null);
+            if (eventCursor != null) {
+                double min = Double.MAX_VALUE;
+                Date minDate = new Date();
+
+                while (eventCursor.moveToNext()) {
+                    final String title = eventCursor.getString(0);
+                    final Date begin = new Date(eventCursor.getLong(1));
+                    final Date end = new Date(eventCursor.getLong(2));
+                    final String description = eventCursor.getString(3);
+
+                    if (Double.parseDouble(description.replace(",", ".")) < min) {
+                        min = Double.parseDouble(description.replace(",", "."));
+                        minDate = begin;
+                    }
+
+                    //Log.i("Nivel", Integer.toString(title.length()));
+                }
+                sdf = new SimpleDateFormat(patronFecha);
+                fechaActual = sdf.format(minDate);
+                Log.i("Minimo", "Tiempo: " + Double.toString(min) + "\tFecha: " + minDate);
+                puntuaciones.append(Integer.toString(i + 1) + "     " + fechaActual + " " + String.format("%.2f", min).replace(".", ",") +  "\n");
+            }
+        }
     }
 
     // Asociamos el servicio de música
