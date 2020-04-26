@@ -3,17 +3,23 @@ package edu.uoc.resolvers;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
 
 import android.app.Activity;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.content.ComponentName;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.media.AudioManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.PowerManager;
@@ -95,11 +101,31 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
                 // Obtenemos la BBDD
                 SQLiteDatabase db = dbHelper.getWritableDatabase();
 
+                // Creamos consulta
+                Cursor consultaRecord = db.query(BBDDEsquema.NOMBRE_TABLA, new String[] { "MIN(" + BBDDEsquema.COLUMNA_PUNTOS + ")" }, null, null,
+                        null, null, null);
+                consultaRecord.moveToFirst();  //ADD THIS!
+                int record = consultaRecord.getInt(0);
+
                 // Insertamos la puntuación en la BBDD
                 ContentValues valores = new ContentValues();
                 valores.put(BBDDEsquema.COLUMNA_FECHA, String.valueOf(fechaActual));
                 valores.put(BBDDEsquema.COLUMNA_NIVEL, numCortes - 1);
                 valores.put(BBDDEsquema.COLUMNA_PUNTOS, segTranscurridos);
+
+                if (segTranscurridos < record) { //Si
+                    createNotificationChannel();
+
+                    NotificationCompat.Builder builder = new NotificationCompat.Builder(ActividadPrincipal.this, "CHANNEL_NEW_RECORD")
+                            .setSmallIcon(R.drawable.notification_icon)
+                            .setContentTitle("The Resolvers")
+                            .setContentText("¡Enhorabuena, has batido un nuevo récord!");
+
+                    NotificationManagerCompat notificationManager = NotificationManagerCompat.from(ActividadPrincipal.this);
+
+                    // notificationId is a unique int for each notification that you must define
+                    notificationManager.notify(1, builder.build());
+                }
 
                 long idNuevaFila = db.insert(BBDDEsquema.NOMBRE_TABLA, null, valores);
 
@@ -309,5 +335,21 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
         Intent music = new Intent();
         music.setClass(this,ServicioMusica.class);
         stopService(music);
+    }
+
+    private void createNotificationChannel() {
+        // Create the NotificationChannel, but only on API 26+ because
+        // the NotificationChannel class is new and not in the support library
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            CharSequence name = getString(R.string.channel_name);
+            String description = getString(R.string.channel_description);
+            int importance = NotificationManager.IMPORTANCE_HIGH;
+            NotificationChannel channel = new NotificationChannel("CHANNEL_NEW_RECORD", name, importance);
+            channel.setDescription(description);
+            // Register the channel with the system; you can't change the importance
+            // or other notification behaviors after this
+            NotificationManager notificationManager = getSystemService(NotificationManager.class);
+            notificationManager.createNotificationChannel(channel);
+        }
     }
 }
