@@ -12,6 +12,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.database.sqlite.SQLiteDatabase;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -42,6 +43,7 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
     HomeWatcher mHomeWatcher;
     private static final int READ_REQUEST_CODE = 42;
     public static final String Broadcast_PLAY_NEW_AUDIO = "edu.uoc.resolvers";
+    private boolean isChecked = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -161,9 +163,28 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
                 // Se abre el selector de música
                 performFileSearch();
                 return true;
+            case R.id.checkable_menu:
+                isChecked = !item.isChecked();
+                item.setChecked(isChecked);
+                if (isChecked) {
+                    AudioManager amanager=(AudioManager)getSystemService(Context.AUDIO_SERVICE);
+                    amanager.setStreamMute(AudioManager.STREAM_MUSIC, true);
+                } else {
+                    AudioManager amanager=(AudioManager)getSystemService(Context.AUDIO_SERVICE);
+                    amanager.setStreamMute(AudioManager.STREAM_MUSIC, false);
+                }
+
+                return true;
             default:
                 return super.onOptionsItemSelected(item);
         }
+    }
+
+    @Override
+    public boolean onPrepareOptionsMenu(Menu menu) {
+        MenuItem checkable = menu.findItem(R.id.checkable_menu);
+        checkable.setChecked(isChecked);
+        return true;
     }
 
     /**

@@ -1,9 +1,14 @@
 package edu.uoc.resolvers;
 
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
+import android.media.AudioAttributes;
+import android.media.AudioManager;
+import android.media.SoundPool;
+import android.os.Build;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.view.MotionEvent;
@@ -12,6 +17,7 @@ import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
+import android.widget.Toast;
 
 import androidx.customview.widget.ViewDragHelper;
 
@@ -47,6 +53,26 @@ public class PuzzleLayout extends RelativeLayout {
     }
 
     private void init() {
+        final SoundPool soundPool;
+        final int deslizar;
+        final int exito;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build();
+
+            soundPool = new SoundPool.Builder()
+                    .setMaxStreams(6)
+                    .setAudioAttributes(audioAttributes)
+                    .build();
+        } else {
+            soundPool = new SoundPool(6, AudioManager.STREAM_MUSIC, 0);
+        }
+
+        deslizar = soundPool.load(this.getContext(), R.raw.deslizar, 1);
+        exito = soundPool.load(this.getContext(), R.raw.exito, 1);
 
         getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
             @Override
@@ -150,8 +176,11 @@ public class PuzzleLayout extends RelativeLayout {
                 releasedChild.setLayoutParams(lp);
                 invalidate();
 
+                soundPool.play(deslizar, 1, 1, 1, 0, 1);
+
                 if(estaCompleto){
                     piezaVacia.setVisibility(VISIBLE);
+                    soundPool.play(exito, 1, 1, 1, 0, 1);
                     occ.onComplete();
                 }
             }
