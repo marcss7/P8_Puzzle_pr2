@@ -104,7 +104,8 @@ public class ActividadInicio extends AppCompatActivity {
     }
 
     private void obtenerPuntuaciones(TextView puntuaciones) {
-        for (int i = 0; i < 2; i++) {
+        puntuaciones.append("");
+        for (int i = 0; i < 5; i++) {
             ContentResolver contentResolver = getContentResolver();
             Uri.Builder builder = CalendarContract.Instances.CONTENT_URI.buildUpon();
 
@@ -121,7 +122,7 @@ public class ActividadInicio extends AppCompatActivity {
             Cursor eventCursor = contentResolver.query(builder.build(), new String[]{CalendarContract.Instances.TITLE,
                             CalendarContract.Instances.BEGIN, CalendarContract.Instances.END, CalendarContract.Instances.DESCRIPTION},
                     CalendarContract.Instances.CALENDAR_ID + " = ? AND " + CalendarContract.Instances.TITLE + " = ?", args, null);
-            if (eventCursor != null) {
+            if (eventCursor.getCount() > 0) {
                 double min = Double.MAX_VALUE;
                 Date minDate = new Date();
 
@@ -135,12 +136,12 @@ public class ActividadInicio extends AppCompatActivity {
                         min = Double.parseDouble(description.replace(",", "."));
                         minDate = begin;
                     }
-
+                    Log.i("Minimo", "Descripcion: " + description);
                     //Log.i("Nivel", Integer.toString(title.length()));
                 }
                 sdf = new SimpleDateFormat(patronFecha);
                 fechaActual = sdf.format(minDate);
-                Log.i("Minimo", "Tiempo: " + Double.toString(min) + "\tFecha: " + minDate);
+
                 puntuaciones.append(Integer.toString(i + 1) + "     " + fechaActual + " " + String.format("%.2f", min).replace(".", ",") +  "\n");
             }
         }
