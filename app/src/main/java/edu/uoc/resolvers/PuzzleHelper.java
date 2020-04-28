@@ -151,5 +151,4 @@ class PuzzleHelper {
             return POSICION_ACTUAL;
         }
     }
-
 }

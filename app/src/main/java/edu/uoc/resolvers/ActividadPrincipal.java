@@ -6,6 +6,9 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
+import androidx.core.content.ContextCompat;
+
+import android.Manifest;
 import android.app.Activity;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -27,6 +30,7 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.provider.CalendarContract;
+import android.provider.MediaStore;
 import android.text.format.DateUtils;
 import android.util.Log;
 import android.view.Menu;
@@ -34,10 +38,13 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.widget.Toast;
 
+import java.io.IOException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.Random;
 
 /*
     Esta clase representa la pantalla de juego.
@@ -45,18 +52,22 @@ import java.util.Date;
 public class ActividadPrincipal extends AppCompatActivity implements Runnable {
     private PuzzleLayout pl;
     private int numCortes = 2;
-    private int imagen = R.mipmap.img_02;
+    private int imagen;
     private long tInicio, tFin, tDelta;
     private String fechaActual;
     private String patronFecha = "dd/MM/yyyy";
     private SimpleDateFormat sdf;
     private double segTranscurridos;
     private static final int SECOND_ACTIVITY_REQUEST_CODE = 0;
-    private static final int NIVELES = 5;
+    private static final int NIVELES = 2;
     HomeWatcher mHomeWatcher;
     private static final int READ_REQUEST_CODE = 42;
     public static final String Broadcast_PLAY_NEW_AUDIO = "edu.uoc.resolvers";
     private boolean isChecked = false;
+    private static final int MY_PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE = 1;
+    private ArrayList<Integer> imagenesDisponibles = new ArrayList<>();
+    private ArrayList<Integer> imagenesUsadas = new ArrayList<>();
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -88,8 +99,34 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
         });
         mHomeWatcher.startWatch();
 
+        if (checkPermissionREAD_EXTERNAL_STORAGE(this)) {
+            ContentResolver cr = getApplicationContext().getContentResolver();
+            String[] projection = new String[]{ MediaStore.Images.Media._ID, MediaStore.Images.Media.DATA};
+            try {
+                Cursor cursor = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, null, null, null);
+                if(cursor != null)
+                {
+                    while (cursor.moveToNext()){
+                        String id = cursor.getString(cursor.getColumnIndex(MediaStore.Images.ImageColumns._ID));
+                        //Uri path = Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, String.valueOf(id));
+                        //Log.i("Image", "Id: " + id);
+                        imagenesDisponibles.add(Integer.parseInt(id));
+                    }
+                    cursor.close();
+                }
+            } catch (Exception e) { //be as specific as possible when catching an exception
+                Log.e("CursorException", e.getMessage(), e);
+            }
+            imagen = seleccionarImagenAleatoria(imagenesDisponibles);
+        }
+
         pl = findViewById(R.id.tablero_juego);
-        pl.establecerImagen(imagen, numCortes);
+        Log.i("Imagen", "Title: " + imagen);
+        try {
+            pl.establecerImagen(imagen, numCortes);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
 
         // Empezamos a contar el tiempo
         tInicio = System.currentTimeMillis();
@@ -112,7 +149,7 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
                 SQLiteDatabase db = dbHelper.getWritableDatabase();
 
                 // Creamos consulta
-                Cursor consultaRecord = db.query(BBDDEsquema.NOMBRE_TABLA, new String[] { "MIN(" + BBDDEsquema.COLUMNA_PUNTOS + ")" }, null, null,
+                Cursor consultaRecord = db.query(BBDDEsquema.NOMBRE_TABLA, new String[]{"MIN(" + BBDDEsquema.COLUMNA_PUNTOS + ")"}, null, null,
                         null, null, null);
                 consultaRecord.moveToFirst();  //ADD THIS!
                 int record = consultaRecord.getInt(0);
@@ -132,7 +169,86 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
                 pl.postDelayed(ActividadPrincipal.this, 3000);
             }
         });
+
     }
+
+    private int seleccionarImagenAleatoria(ArrayList<Integer> imagenes) {
+        Random rand = new Random();
+        int imagen = imagenes.get(rand.nextInt(imagenes.size()));
+        while (imagenesUsadas.contains(imagen)) {
+            imagen = imagenes.get(rand.nextInt(imagenes.size()));
+            Log.i("Usada", "Id: " + imagen);
+        }
+        imagenesUsadas.add(imagen);
+        return imagen;
+    }
+
+    public boolean checkPermissionREAD_EXTERNAL_STORAGE(
+            final Context context) {
+        int currentAPIVersion = Build.VERSION.SDK_INT;
+        if (currentAPIVersion >= android.os.Build.VERSION_CODES.M) {
+            if (ContextCompat.checkSelfPermission(context,
+                    Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                if (ActivityCompat.shouldShowRequestPermissionRationale(
+                        (Activity) context,
+                        Manifest.permission.READ_EXTERNAL_STORAGE)) {
+                    showDialog("External storage", context,
+                            Manifest.permission.READ_EXTERNAL_STORAGE);
+
+                } else {
+                    ActivityCompat
+                            .requestPermissions(
+                                    (Activity) context,
+                                    new String[] { Manifest.permission.READ_EXTERNAL_STORAGE },
+                                    MY_PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE);
+                }
+                return false;
+            } else {
+                return true;
+            }
+
+        } else {
+            return true;
+        }
+    }
+
+    public void showDialog(final String msg, final Context context,
+                           final String permission) {
+        AlertDialog.Builder alertBuilder = new AlertDialog.Builder(context);
+        alertBuilder.setCancelable(true);
+        alertBuilder.setTitle("Permission necessary");
+        alertBuilder.setMessage(msg + " permission is necessary");
+        alertBuilder.setPositiveButton(android.R.string.yes,
+                new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int which) {
+                        ActivityCompat.requestPermissions((Activity) context,
+                                new String[] { permission },
+                                MY_PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE);
+                    }
+                });
+        AlertDialog alert = alertBuilder.create();
+        alert.show();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode,
+                                           String[] permissions, int[] grantResults) {
+        switch (requestCode) {
+            case MY_PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE:
+                if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    // do your stuff
+                } else {
+                    Toast.makeText(this, "GET_ACCOUNTS Denied",
+                            Toast.LENGTH_SHORT).show();
+                }
+                break;
+            default:
+                super.onRequestPermissionsResult(requestCode, permissions,
+                        grantResults);
+        }
+    }
+
+
 
     private void agregarEventoCalendario(int nivel, double tiempo) {
         if (recurperarPuntuacionesCalendario(nivel, tiempo)) {
@@ -158,76 +274,75 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
             Uri uri = cr.insert(CalendarContract.Events.CONTENT_URI, values);
 
 
-                createNotificationChannel();
+            createNotificationChannel();
 
-                NotificationCompat.Builder builder = new NotificationCompat.Builder(ActividadPrincipal.this, "CHANNEL_NEW_RECORD")
-                        .setSmallIcon(R.drawable.notification_icon)
-                        .setContentTitle("The Resolvers")
-                        .setContentText("¡Enhorabuena, has batido un nuevo récord!");
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(ActividadPrincipal.this, "CHANNEL_NEW_RECORD")
+                    .setSmallIcon(R.drawable.notification_icon)
+                    .setContentTitle("The Resolvers")
+                    .setContentText("¡Enhorabuena, has batido un nuevo récord! " + String.format("%.2f", tiempo).replace(".", ",") + "s");
 
-                NotificationManagerCompat notificationManager = NotificationManagerCompat.from(ActividadPrincipal.this);
+            NotificationManagerCompat notificationManager = NotificationManagerCompat.from(ActividadPrincipal.this);
 
-                // notificationId is a unique int for each notification that you must define
-                notificationManager.notify(1, builder.build());
+            // notificationId is a unique int for each notification that you must define
+            notificationManager.notify(1, builder.build());
         }
     }
 
     private boolean recurperarPuntuacionesCalendario(int nivel, double tiempo) {
         ContentResolver contentResolver = getContentResolver();
-            Uri.Builder builder = CalendarContract.Instances.CONTENT_URI.buildUpon();
+        Uri.Builder builder = CalendarContract.Instances.CONTENT_URI.buildUpon();
 
-            Calendar beginTime = Calendar.getInstance();
-            beginTime.set(2000, Calendar.JANUARY, 1, 0, 0);
-            long startMills = beginTime.getTimeInMillis();
-            long endMills = System.currentTimeMillis();
+        Calendar beginTime = Calendar.getInstance();
+        beginTime.set(2000, Calendar.JANUARY, 1, 0, 0);
+        long startMills = beginTime.getTimeInMillis();
+        long endMills = System.currentTimeMillis();
 
-            ContentUris.appendId(builder, startMills);
-            ContentUris.appendId(builder, endMills);
-            String[] args = new String[]{"3"};
+        ContentUris.appendId(builder, startMills);
+        ContentUris.appendId(builder, endMills);
+        String[] args = new String[]{"3"};
 
-            Cursor eventCursor = contentResolver.query(builder.build(), new String[]{CalendarContract.Instances.TITLE,
-                            CalendarContract.Instances.BEGIN, CalendarContract.Instances.END, CalendarContract.Instances.DESCRIPTION},
-                    CalendarContract.Instances.CALENDAR_ID + " = ?", args, null);
+        Cursor eventCursor = contentResolver.query(builder.build(), new String[]{CalendarContract.Instances.TITLE,
+                        CalendarContract.Instances.BEGIN, CalendarContract.Instances.END, CalendarContract.Instances.DESCRIPTION},
+                CalendarContract.Instances.CALENDAR_ID + " = ?", args, null);
 
-            boolean isRecord = false;
-            boolean hayRegistros = false;
+        boolean isRecord = false;
+        boolean hayRegistros = false;
 
-            while (eventCursor.moveToNext()) {
-                final String title = eventCursor.getString(0);
-                final Date begin = new Date(eventCursor.getLong(1));
-                final Date end = new Date(eventCursor.getLong(2));
-                final String description = eventCursor.getString(3);
+        while (eventCursor.moveToNext()) {
+            final String title = eventCursor.getString(0);
+            final Date begin = new Date(eventCursor.getLong(1));
+            final Date end = new Date(eventCursor.getLong(2));
+            final String description = eventCursor.getString(3);
 
-                //Log.i("Nivel", Integer.toString(title.length()));
+            //Log.i("Nivel", Integer.toString(title.length()));
 
-                if (title.length() == 22 && title.substring(title.length() - 2, title.length() - 1).equals(Integer.toString(nivel))) {
-                    hayRegistros = true;
-                    if (tiempo < Double.parseDouble(description.replace(",", "."))) {
-                        isRecord = true;
-                    } else {
-                        isRecord = false;
-                    }
+            if (title.length() == 22 && title.substring(title.length() - 2, title.length() - 1).equals(Integer.toString(nivel))) {
+                hayRegistros = true;
+                if (tiempo < Double.parseDouble(description.replace(",", "."))) {
+                    isRecord = true;
+                } else {
+                    isRecord = false;
                 }
-                Log.i("Cursor", "Title: " + title + "\tDescription: " + description + "\tBegin: " + begin + "\tEnd: " + end);
             }
+            Log.i("Cursor", "Title: " + title + "\tDescription: " + description + "\tBegin: " + begin + "\tEnd: " + end);
+        }
 
-            //Log.i("Record", Boolean.toString(isRecord));
-            if (hayRegistros) {
-                return isRecord;
-            } else {
-                return !isRecord;
-            }
-
+        //Log.i("Record", Boolean.toString(isRecord));
+        if (hayRegistros) {
+            return isRecord;
+        } else {
+            return !isRecord;
+        }
     }
 
     // Asociamos el servicio de música
     private boolean mIsBound = false;
     private ServicioMusica mServ;
-    private ServiceConnection Scon = new ServiceConnection(){
+    private ServiceConnection Scon = new ServiceConnection() {
 
         public void onServiceConnected(ComponentName name, IBinder
                 binder) {
-            mServ = ((ServicioMusica.ServiceBinder)binder).getService();
+            mServ = ((ServicioMusica.ServiceBinder) binder).getService();
         }
 
         public void onServiceDisconnected(ComponentName name) {
@@ -235,16 +350,14 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
         }
     };
 
-    void doBindService(){
-        bindService(new Intent(this,ServicioMusica.class),
+    void doBindService() {
+        bindService(new Intent(this, ServicioMusica.class),
                 Scon, Context.BIND_AUTO_CREATE);
         mIsBound = true;
     }
 
-    void doUnbindService()
-    {
-        if(mIsBound)
-        {
+    void doUnbindService() {
+        if (mIsBound) {
             unbindService(Scon);
             mIsBound = false;
         }
@@ -275,10 +388,10 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
                 isChecked = !item.isChecked();
                 item.setChecked(isChecked);
                 if (isChecked) {
-                    AudioManager amanager=(AudioManager)getSystemService(Context.AUDIO_SERVICE);
+                    AudioManager amanager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
                     amanager.setStreamMute(AudioManager.STREAM_MUSIC, true);
                 } else {
-                    AudioManager amanager=(AudioManager)getSystemService(Context.AUDIO_SERVICE);
+                    AudioManager amanager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
                     amanager.setStreamMute(AudioManager.STREAM_MUSIC, false);
                 }
 
@@ -342,13 +455,18 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
     @Override
     public void run() {
         numCortes++;
-        imagen++;
+        imagen = seleccionarImagenAleatoria(imagenesDisponibles);
+        // imagen++;
         // Si llegamos al último puzzle muestra el dialogo del fin del juego
         // Si no carga el siguiente puzzle
-        if(numCortes > NIVELES + 1){
+        if (numCortes > NIVELES + 1) {
             showDialog();
-        }else {
-            pl.establecerImagen(imagen, numCortes);
+        } else {
+            try {
+                pl.establecerImagen(imagen, numCortes);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
 
@@ -362,8 +480,13 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
                             @Override
                             public void onClick(DialogInterface dialog, int which) {
                                 numCortes = 2;
-                                imagen = R.mipmap.img_02;
-                                pl.establecerImagen(imagen, numCortes);
+                                imagen = seleccionarImagenAleatoria(imagenesDisponibles);
+                                //imagen = R.mipmap.img_02;
+                                try {
+                                    pl.establecerImagen(imagen, numCortes);
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }
                                 tInicio = System.currentTimeMillis();
                             }
                         }).setNegativeButton(R.string.salir,
@@ -415,7 +538,7 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
         //UNBIND music service
         doUnbindService();
         Intent music = new Intent();
-        music.setClass(this,ServicioMusica.class);
+        music.setClass(this, ServicioMusica.class);
         stopService(music);
     }
 

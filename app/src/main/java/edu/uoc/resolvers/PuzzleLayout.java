@@ -1,5 +1,6 @@
 package edu.uoc.resolvers;
 
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -8,9 +9,12 @@ import android.graphics.Matrix;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
 import android.media.SoundPool;
+import android.net.Uri;
 import android.os.Build;
+import android.provider.MediaStore;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -20,6 +24,8 @@ import android.widget.RelativeLayout;
 import android.widget.Toast;
 
 import androidx.customview.widget.ViewDragHelper;
+
+import java.io.IOException;
 
 /*
     Esta clase nos permite especificar como se posicionan unas piezas
@@ -81,7 +87,11 @@ public class PuzzleLayout extends RelativeLayout {
                 anchuraImagen = getWidth();
                 getViewTreeObserver().removeOnPreDrawListener(this);
                 if(idImagen != 0 && numCortes != 0){
-                    crearPiezas();
+                    try {
+                        crearPiezas();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                 }
                 return false;
             }
@@ -207,16 +217,18 @@ public class PuzzleLayout extends RelativeLayout {
 
     // Esté método trocea la imagen que toca en función
     // del número de cortes que se le pasan por parámetro.
-    public void establecerImagen(int idImagen, int numCortes) {
+    public void establecerImagen(int idImagen, int numCortes) throws IOException {
         this.numCortes = numCortes;
         this.idImagen = idImagen;
+
+
         if(anchuraImagen != 0 && alturaImagen != 0){
             crearPiezas();
         }
     }
 
     // Este método crea las piezas del puzzle y las desordena.
-    private void crearPiezas() {
+    private void crearPiezas() throws IOException {
         removeAllViews();
         ph.establecerNumeroCortes(numCortes);
 
@@ -224,7 +236,11 @@ public class PuzzleLayout extends RelativeLayout {
         BitmapFactory.Options options = new BitmapFactory.Options();
         options.inDensity = dm.densityDpi;
 
-        Bitmap resource = BitmapFactory.decodeResource(getResources(), idImagen, options);
+        // <<<<<<<<<<<<<<---------------------------------->>>>>>>>>>>>>>
+        ContentResolver cr = this.getContext().getContentResolver();
+        Uri imageUri = Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, String.valueOf(idImagen));
+        Bitmap resource = MediaStore.Images.Media.getBitmap(cr, imageUri);
+        //Bitmap resource = BitmapFactory.decodeResource(getResources(), idImagen, options);
         Bitmap bitmap = escalarImagen(resource, anchuraImagen, alturaImagen);
         resource.recycle();
 

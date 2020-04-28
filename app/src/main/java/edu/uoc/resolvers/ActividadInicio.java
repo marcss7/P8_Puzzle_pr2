@@ -55,6 +55,7 @@ public class ActividadInicio extends AppCompatActivity {
                     mServ.pauseMusic();
                 }
             }
+
             @Override
             public void onHomeLongPressed() {
                 if (mServ != null) {
@@ -142,7 +143,7 @@ public class ActividadInicio extends AppCompatActivity {
                 sdf = new SimpleDateFormat(patronFecha);
                 fechaActual = sdf.format(minDate);
 
-                puntuaciones.append(Integer.toString(i + 1) + "     " + fechaActual + " " + String.format("%.2f", min).replace(".", ",") +  "\n");
+                puntuaciones.append(Integer.toString(i + 1) + "     " + fechaActual + " " + String.format("%.2f", min).replace(".", ",") + "\n");
             }
         }
     }
@@ -150,11 +151,11 @@ public class ActividadInicio extends AppCompatActivity {
     // Asociamos el servicio de música
     private boolean mIsBound = false;
     private ServicioMusica mServ;
-    private ServiceConnection Scon =new ServiceConnection(){
+    private ServiceConnection Scon = new ServiceConnection() {
 
         public void onServiceConnected(ComponentName name, IBinder
                 binder) {
-            mServ = ((ServicioMusica.ServiceBinder)binder).getService();
+            mServ = ((ServicioMusica.ServiceBinder) binder).getService();
         }
 
         public void onServiceDisconnected(ComponentName name) {
@@ -162,16 +163,14 @@ public class ActividadInicio extends AppCompatActivity {
         }
     };
 
-    void doBindService(){
-        bindService(new Intent(this,ServicioMusica.class),
+    void doBindService() {
+        bindService(new Intent(this, ServicioMusica.class),
                 Scon, Context.BIND_AUTO_CREATE);
         mIsBound = true;
     }
 
-    void doUnbindService()
-    {
-        if(mIsBound)
-        {
+    void doUnbindService() {
+        if (mIsBound) {
             unbindService(Scon);
             mIsBound = false;
         }
@@ -214,7 +213,7 @@ public class ActividadInicio extends AppCompatActivity {
         }
     }
 
-    // Este métodod desasocia el servicio de música cuando no lo necesitamos
+    // Este método desasocia el servicio de música cuando no lo necesitamos
     @Override
     protected void onDestroy() {
         super.onDestroy();
@@ -222,7 +221,7 @@ public class ActividadInicio extends AppCompatActivity {
         //UNBIND music service
         doUnbindService();
         Intent music = new Intent();
-        music.setClass(this,ServicioMusica.class);
+        music.setClass(this, ServicioMusica.class);
         stopService(music);
     }
 
