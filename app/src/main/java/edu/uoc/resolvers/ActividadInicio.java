@@ -1,13 +1,17 @@
 package edu.uoc.resolvers;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
+import android.Manifest;
 import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
@@ -19,7 +23,6 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
-
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
@@ -33,6 +36,7 @@ public class ActividadInicio extends AppCompatActivity {
     private String patronFecha = "dd/MM/yyyy";
     private SimpleDateFormat sdf;
     private String fechaActual;
+    private int CALENDAR_PERMISSION_CODE = 1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,6 +68,9 @@ public class ActividadInicio extends AppCompatActivity {
             }
         });
         mHomeWatcher.startWatch();
+
+        //Solicita los permisos de escritura y lectura en el Calendario.
+        ActivityCompat.requestPermissions(this, new String[] {Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR}, CALENDAR_PERMISSION_CODE);
 
         Button botonInicio = findViewById(R.id.botonInicio);
         botonInicio.setOnClickListener(new View.OnClickListener() {
@@ -101,9 +108,15 @@ public class ActividadInicio extends AppCompatActivity {
         }
         cursor.close();*/
 
-        obtenerPuntuaciones(puntuaciones);
-    }
+        //Comprueba si se han concedido los permisos de lectura y escritura en el Calendario.
+        if (ContextCompat.checkSelfPermission(ActividadInicio.this, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED && ContextCompat.checkSelfPermission(ActividadInicio.this, Manifest.permission.WRITE_CALENDAR) == PackageManager.PERMISSION_GRANTED) {
+            obtenerPuntuaciones(puntuaciones); //Con los permisos concedidos, se muestran las puntuaciones en el TextView.
+        } else {
+            //Sin la concesión del permiso, se muestra el siguiente mensaje en el TextView.
+            puntuaciones.append("Debe dar permisos de lectura y escritura al Calendario para poder visualizar y registrar nuevas puntuaciones.");
+        }
 
+    }
     private void obtenerPuntuaciones(TextView puntuaciones) {
         puntuaciones.append("");
         for (int i = 0; i < 5; i++) {
