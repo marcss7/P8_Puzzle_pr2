@@ -7,6 +7,7 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 
 import android.Manifest;
 import android.app.Activity;
@@ -23,10 +24,12 @@ import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
+import android.graphics.Bitmap;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.provider.CalendarContract;
@@ -38,7 +41,14 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.widget.Toast;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -59,7 +69,7 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
     private SimpleDateFormat sdf;
     private double segTranscurridos;
     private static final int SECOND_ACTIVITY_REQUEST_CODE = 0;
-    private static final int NIVELES = 2;
+    private static final int NIVELES = 5;
     HomeWatcher mHomeWatcher;
     private static final int READ_REQUEST_CODE = 42;
     public static final String Broadcast_PLAY_NEW_AUDIO = "edu.uoc.resolvers";
@@ -67,12 +77,21 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
     private static final int MY_PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE = 1;
     private ArrayList<Integer> imagenesDisponibles = new ArrayList<>();
     private ArrayList<Integer> imagenesUsadas = new ArrayList<>();
+    private Integer REQUEST_CAMERA = 1;
+    String currentPhotoPath;
+    File photoFile;
+    Uri imageUri = null;
+    Bitmap selectedImage;
 
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.actividad_principal);
+
+        if (Build.VERSION.SDK_INT >= 23) {
+            requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.CAMERA}, 2);
+        }
 
         // Asociamos el servicio de música
         doBindService();
@@ -101,15 +120,14 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
 
         if (checkPermissionREAD_EXTERNAL_STORAGE(this)) {
             ContentResolver cr = getApplicationContext().getContentResolver();
-            String[] projection = new String[]{ MediaStore.Images.Media._ID, MediaStore.Images.Media.DATA};
+            String[] projection = new String[]{MediaStore.Images.Media._ID, MediaStore.Images.Media.DATA};
             try {
                 Cursor cursor = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, null, null, null);
-                if(cursor != null)
-                {
-                    while (cursor.moveToNext()){
+                if (cursor != null) {
+                    while (cursor.moveToNext()) {
                         String id = cursor.getString(cursor.getColumnIndex(MediaStore.Images.ImageColumns._ID));
-                        //Uri path = Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, String.valueOf(id));
-                        //Log.i("Image", "Id: " + id);
+                        Uri path = Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, String.valueOf(id));
+                        Log.i("Dis", "Id: " + id + "\tUri: " + path.getPath());
                         imagenesDisponibles.add(Integer.parseInt(id));
                     }
                     cursor.close();
@@ -121,7 +139,9 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
         }
 
         pl = findViewById(R.id.tablero_juego);
+
         Log.i("Imagen", "Title: " + imagen);
+
         try {
             pl.establecerImagen(imagen, numCortes);
         } catch (IOException e) {
@@ -199,7 +219,7 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
                     ActivityCompat
                             .requestPermissions(
                                     (Activity) context,
-                                    new String[] { Manifest.permission.READ_EXTERNAL_STORAGE },
+                                    new String[]{Manifest.permission.READ_EXTERNAL_STORAGE},
                                     MY_PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE);
                 }
                 return false;
@@ -222,7 +242,7 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
                 new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialog, int which) {
                         ActivityCompat.requestPermissions((Activity) context,
-                                new String[] { permission },
+                                new String[]{permission},
                                 MY_PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE);
                     }
                 });
@@ -249,7 +269,6 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
     }
 
 
-
     private void agregarEventoCalendario(int nivel, double tiempo) {
         if (recurperarPuntuacionesCalendario(nivel, tiempo)) {
             long fecha_record = System.currentTimeMillis();
@@ -272,7 +291,6 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
                 return;
             }
             Uri uri = cr.insert(CalendarContract.Events.CONTENT_URI, values);
-
 
             createNotificationChannel();
 
@@ -314,8 +332,6 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
             final Date end = new Date(eventCursor.getLong(2));
             final String description = eventCursor.getString(3);
 
-            //Log.i("Nivel", Integer.toString(title.length()));
-
             if (title.length() == 22 && title.substring(title.length() - 2, title.length() - 1).equals(Integer.toString(nivel))) {
                 hayRegistros = true;
                 if (tiempo < Double.parseDouble(description.replace(",", "."))) {
@@ -327,7 +343,6 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
             Log.i("Cursor", "Title: " + title + "\tDescription: " + description + "\tBegin: " + begin + "\tEnd: " + end);
         }
 
-        //Log.i("Record", Boolean.toString(isRecord));
         if (hayRegistros) {
             return isRecord;
         } else {
@@ -380,6 +395,41 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
                 Intent ayuda = new Intent(this, ActividadAyuda.class);
                 startActivity(ayuda);
                 return true;
+            case R.id.camara:
+                mServ.pauseMusic();
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Images.Media.TITLE, "New Picture");
+                values.put(MediaStore.Images.Media.DESCRIPTION, "From your Camera");
+
+                Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                // Ensure that there's a camera activity to handle the intent
+                if (takePictureIntent.resolveActivity(getPackageManager()) != null) {
+                    // Create the File where the photo should go
+
+                    try {
+                        photoFile = createImageFile();
+                    } catch (IOException ex) {
+                        // Error occurred while creating the File
+                    }
+                    // Continue only if the File was successfully created
+                    if (photoFile != null) {
+                        try {
+                            //Uri photoURI = FileProvider.getUriForFile(this, "edu.uoc.resolvers.fileprovider",photoFile);
+                            imageUri = getContentResolver().insert(
+                                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+                            Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                            intent.putExtra(MediaStore.EXTRA_OUTPUT, imageUri);
+                            //takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI);
+                            startActivityForResult(intent, REQUEST_CAMERA);
+                        } catch (Exception e) {
+                            Log.e("Uri", e.getMessage());
+                        }
+
+                    }
+                }
+
+                //Toast.makeText(this, "Se abre la cámara", Toast.LENGTH_SHORT).show();
+                return true;
             case R.id.selector_musica:
                 // Se abre el selector de música
                 performFileSearch();
@@ -400,6 +450,25 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
                 return super.onOptionsItemSelected(item);
         }
     }
+
+    private File createImageFile() throws IOException {
+        // Create an image file name
+        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+        String imageFileName = "JPEG_" + timeStamp + "_";
+        File storageDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+        String path = Environment.getExternalStorageDirectory().getAbsolutePath() + "/" + R.string.app_name + "/";
+        //File storageDir = new File("external/images/media/");
+        File image = File.createTempFile(
+                imageFileName,  /* prefix */
+                ".jpg",         /* suffix */
+                storageDir      /* directory */
+        );
+
+        // Save a file: path for use with ACTION_VIEW intents
+        currentPhotoPath = image.getAbsolutePath();
+        return image;
+    }
+
 
     @Override
     public boolean onPrepareOptionsMenu(Menu menu) {
@@ -430,26 +499,107 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
     }
 
     @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent resultData) {
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
 
         // The ACTION_OPEN_DOCUMENT intent was sent with the request code
         // READ_REQUEST_CODE. If the request code seen here doesn't match, it's the
         // response to some other intent, and the code below shouldn't run at all.
 
-        super.onActivityResult(requestCode, resultCode, resultData);
+        super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == READ_REQUEST_CODE && resultCode == Activity.RESULT_OK) {
             // The document selected by the user won't be returned in the intent.
             // Instead, a URI to that document will be contained in the return intent
             // provided to this method as a parameter.
             // Pull that URI using resultData.getData().
             Uri uri = null;
-            if (resultData != null) {
-                uri = resultData.getData();
+            if (data != null) {
+                uri = data.getData();
                 ServicioMusica.audioUri = uri;
                 Intent broadcastIntent = new Intent(Broadcast_PLAY_NEW_AUDIO);
                 sendBroadcast(broadcastIntent);
             }
+        } else if (requestCode == REQUEST_CAMERA && resultCode == RESULT_OK) {
+
+            Bitmap photo = null;
+            try {
+                photo = MediaStore.Images.Media.getBitmap(
+                        getContentResolver(), imageUri);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            selectedImage = getResizedBitmap(photo, 900);
+
+
+            try {
+                //Write file
+                String filename = "/file_name";
+                String dir_path = "Directory_Path";
+                File file = new File(dir_path);
+                file.mkdir();
+                FileOutputStream fileOutputStream = new FileOutputStream(dir_path + filename);
+                selectedImage.compress(Bitmap.CompressFormat.PNG, 100, fileOutputStream);
+
+                //Cleanup
+                fileOutputStream.close();
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            imagen = getLastImageId();
+            imagenesUsadas.add(imagen);
+            try {
+                pl.establecerImagen(imagen, numCortes);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            Log.i("Camera", "Id:  " + imagen);
+            mServ.resumeMusic();
         }
+    }
+
+    //Resize Bitmap
+    public Bitmap getResizedBitmap(Bitmap image, int maxSize) {
+        int width = image.getWidth();
+        int height = image.getHeight();
+
+        float bitmapRatio = (float) width / (float) height;
+        if (bitmapRatio > 1) {
+            width = maxSize;
+            height = (int) (width / bitmapRatio);
+        } else {
+            height = maxSize;
+            width = (int) (height * bitmapRatio);
+        }
+        return Bitmap.createScaledBitmap(image, width, height, true);
+    }
+
+    private int getLastImageId() {
+        final String[] imageColumns = {MediaStore.Images.Media._ID,
+                MediaStore.Images.Media.DATA};
+        final String imageOrderBy = MediaStore.Images.Media._ID + " DESC";
+        Cursor imageCursor = managedQuery(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI, imageColumns,
+                null, null, imageOrderBy);
+        if (imageCursor.moveToFirst()) {
+            int id = imageCursor.getInt(imageCursor
+                    .getColumnIndex(MediaStore.Images.Media._ID));
+            String fullPath = imageCursor.getString(imageCursor
+                    .getColumnIndex(MediaStore.Images.Media.DATA));
+            Log.d(getClass().getSimpleName(), "getLastImageId::id " + id);
+            Log.d(getClass().getSimpleName(), "getLastImageId::path "
+                    + fullPath);
+            imageCursor.close();
+            return id;
+        } else {
+            return 0;
+        }
+    }
+
+    public Uri getImageUri(Context inContext, Bitmap inImage) {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        inImage.compress(Bitmap.CompressFormat.JPEG, 100, bytes);
+        String path = MediaStore.Images.Media.insertImage(inContext.getContentResolver(), inImage, null, null);
+        return Uri.parse(path);
     }
 
     @Override
