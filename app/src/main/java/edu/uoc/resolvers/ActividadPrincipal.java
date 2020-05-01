@@ -421,9 +421,8 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
 
                     if (archivoFoto != null) {
                         imagenUri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
-                        Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                        intent.putExtra(MediaStore.EXTRA_OUTPUT, imagenUri);
-                        startActivityForResult(intent, REQUEST_CAMERA);
+                        intentoFoto.putExtra(MediaStore.EXTRA_OUTPUT, imagenUri);
+                        startActivityForResult(intentoFoto, REQUEST_CAMERA);
                     }
                 }
                 return true;
