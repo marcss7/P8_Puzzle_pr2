@@ -5,9 +5,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 
+/*
+    Esta clase permite a la aplicación detectar si se ha pulsado
+    alguno de los botones del teléfono para así saber si la aplicación
+    ha dejado de estar en primer plano y pausar el servicio de música.
+ */
 public class HomeWatcher {
 
-    //static final String TAG = "hg";
     private Context mContext;
     private IntentFilter mFilter;
     private OnHomePressedListener mListener;
@@ -29,15 +33,8 @@ public class HomeWatcher {
         }
     }
 
-    public void stopWatch() {
-        if (mRecevier != null) {
-            mContext.unregisterReceiver(mRecevier);
-        }
-    }
-
     class InnerRecevier extends BroadcastReceiver {
         final String SYSTEM_DIALOG_REASON_KEY = "reason";
-        final String SYSTEM_DIALOG_REASON_GLOBAL_ACTIONS = "globalactions";
         final String SYSTEM_DIALOG_REASON_RECENT_APPS = "recentapps";
         final String SYSTEM_DIALOG_REASON_HOME_KEY = "homekey";
 
@@ -47,7 +44,6 @@ public class HomeWatcher {
             if (action != null && action.equals(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)) {
                 String reason = intent.getStringExtra(SYSTEM_DIALOG_REASON_KEY);
                 if (reason != null) {
-                    //Log.e(TAG, "action:" + action + ",reason:" + reason);
                     if (mListener != null) {
                         if (reason.equals(SYSTEM_DIALOG_REASON_HOME_KEY)) {
                             mListener.onHomePressed();
@@ -65,4 +61,5 @@ public class HomeWatcher {
 
         void onHomeLongPressed();
     }
+
 }

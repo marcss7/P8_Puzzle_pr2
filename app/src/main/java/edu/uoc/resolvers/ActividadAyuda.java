@@ -17,6 +17,7 @@ import android.webkit.WebViewClient;
     Esta clase representa la vista de la página de ayuda.
  */
 public class ActividadAyuda extends AppCompatActivity {
+
     private WebView vistaAyuda;
     HomeWatcher mHomeWatcher;
 
@@ -25,7 +26,7 @@ public class ActividadAyuda extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.actividad_ayuda);
 
-        // Asociamos el servicio de música
+        // Vinculamos el servicio de música
         doBindService();
         Intent music = new Intent();
         music.setClass(this, ServicioMusica.class);
@@ -69,13 +70,12 @@ public class ActividadAyuda extends AppCompatActivity {
         });
     }
 
-    // Asociamos el servicio de música
+    // Vincular el servicio de música
     private boolean mIsBound = false;
     private ServicioMusica mServ;
-    private ServiceConnection Scon =new ServiceConnection(){
+    private ServiceConnection Scon = new ServiceConnection(){
 
-        public void onServiceConnected(ComponentName name, IBinder
-                binder) {
+        public void onServiceConnected(ComponentName name, IBinder binder) {
             mServ = ((ServicioMusica.ServiceBinder)binder).getService();
         }
 
@@ -84,16 +84,15 @@ public class ActividadAyuda extends AppCompatActivity {
         }
     };
 
-    void doBindService(){
-        bindService(new Intent(this,ServicioMusica.class),
-                Scon, Context.BIND_AUTO_CREATE);
+    // Vincular servicio
+    void doBindService() {
+        bindService(new Intent(this,ServicioMusica.class), Scon, Context.BIND_AUTO_CREATE);
         mIsBound = true;
     }
 
-    void doUnbindService()
-    {
-        if(mIsBound)
-        {
+    // Desvincular servicio
+    void doUnbindService() {
+        if(mIsBound) {
             unbindService(Scon);
             mIsBound = false;
         }
@@ -101,9 +100,9 @@ public class ActividadAyuda extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
-        if (vistaAyuda.canGoBack()){
+        if (vistaAyuda.canGoBack()) {
             vistaAyuda.goBack();
-        }else {
+        } else {
             super.onBackPressed();
         }
     }
@@ -123,10 +122,10 @@ public class ActividadAyuda extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
 
-        //Detect idle screen
-        PowerManager pm = (PowerManager)
-                getSystemService(Context.POWER_SERVICE);
+        // Detectamos la pausa de la pantalla
+        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         boolean isScreenOn = false;
+
         if (pm != null) {
             isScreenOn = pm.isScreenOn();
         }
@@ -138,12 +137,12 @@ public class ActividadAyuda extends AppCompatActivity {
         }
     }
 
-    // Este método desasocia el servicio de música cuando no lo necesitamos
+    // Este método desvincula el servicio de música cuando no lo necesitamos
     @Override
     protected void onDestroy() {
         super.onDestroy();
 
-        //UNBIND music service
+        // Desvinculamos el servicio de música
         doUnbindService();
         Intent music = new Intent();
         music.setClass(this,ServicioMusica.class);

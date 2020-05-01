@@ -7,7 +7,7 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
-import androidx.core.content.FileProvider;
+
 import android.Manifest;
 import android.app.Activity;
 import android.app.NotificationChannel;
@@ -22,7 +22,6 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
-import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Bitmap;
 import android.media.AudioManager;
 import android.net.Uri;
@@ -33,21 +32,13 @@ import android.os.IBinder;
 import android.os.PowerManager;
 import android.provider.CalendarContract;
 import android.provider.MediaStore;
-import android.text.format.DateUtils;
-import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.widget.Toast;
-import java.io.ByteArrayOutputStream;
+
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -58,13 +49,11 @@ import java.util.Random;
     Esta clase representa la pantalla de juego.
  */
 public class ActividadPrincipal extends AppCompatActivity implements Runnable {
+
     private PuzzleLayout pl;
     private int numCortes = 2;
     private int imagen;
     private long tInicio, tFin, tDelta;
-    private String fechaActual;
-    private String patronFecha = "dd/MM/yyyy";
-    private SimpleDateFormat sdf;
     private double segTranscurridos;
     private static final int SECOND_ACTIVITY_REQUEST_CODE = 0;
     private static final int NIVELES = 5;
@@ -76,22 +65,15 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
     private ArrayList<Integer> imagenesDisponibles = new ArrayList<>();
     private ArrayList<Integer> imagenesUsadas = new ArrayList<>();
     private Integer REQUEST_CAMERA = 1;
-    String currentPhotoPath;
-    File photoFile;
-    Uri imageUri = null;
-    Bitmap selectedImage;
-
+    File archivoFoto;
+    Uri imagenUri = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.actividad_principal);
 
-        if (Build.VERSION.SDK_INT >= 23) {
-            requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.CAMERA}, 2);
-        }
-
-        // Asociamos el servicio de música
+        // Vinculamos el servicio de música
         doBindService();
         Intent music = new Intent();
         music.setClass(this, ServicioMusica.class);
@@ -116,30 +98,32 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
         });
         mHomeWatcher.startWatch();
 
+        // Solicitamos permisos para que la app pueda usar la cámara
+        if (Build.VERSION.SDK_INT >= 23) {
+            requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.CAMERA}, 2);
+        }
+
+        // Obtenemos las imágenes a usar en el juego de las almacenadas en el dispositivo del usuario
         if (checkPermissionREAD_EXTERNAL_STORAGE(this)) {
             ContentResolver cr = getApplicationContext().getContentResolver();
             String[] projection = new String[]{MediaStore.Images.Media._ID, MediaStore.Images.Media.DATA};
-            try {
-                Cursor cursor = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, null, null, null);
-                if (cursor != null) {
-                    while (cursor.moveToNext()) {
-                        String id = cursor.getString(cursor.getColumnIndex(MediaStore.Images.ImageColumns._ID));
-                        Uri path = Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, String.valueOf(id));
-                        Log.i("Dis", "Id: " + id + "\tUri: " + path.getPath());
-                        imagenesDisponibles.add(Integer.parseInt(id));
-                    }
-                    cursor.close();
+
+            Cursor cursor = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, null, null, null);
+            if (cursor != null) {
+                while (cursor.moveToNext()) {
+                    String id = cursor.getString(cursor.getColumnIndex(MediaStore.Images.ImageColumns._ID));
+                    Uri path = Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, String.valueOf(id));
+                    imagenesDisponibles.add(Integer.parseInt(id));
                 }
-            } catch (Exception e) { //be as specific as possible when catching an exception
-                Log.e("CursorException", e.getMessage(), e);
+                cursor.close();
             }
+            // Seleccionamos una de esas imágenes de manera aleatoria
             imagen = seleccionarImagenAleatoria(imagenesDisponibles);
         }
 
         pl = findViewById(R.id.tablero_juego);
 
-        Log.i("Imagen", "Title: " + imagen);
-
+        // Establecemos la imagen seleccionada como puzzle
         try {
             pl.establecerImagen(imagen, numCortes);
         } catch (IOException e) {
@@ -148,7 +132,6 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
 
         // Empezamos a contar el tiempo
         tInicio = System.currentTimeMillis();
-        final BBDDHelper dbHelper = new BBDDHelper(this);
 
         // Cuando se completa el puzzle
         pl.setOnCompleteCallback(new PuzzleLayout.OnCompleteCallback() {
@@ -156,29 +139,11 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
             public void onComplete() {
                 // Paramos el tiempo
                 tFin = System.currentTimeMillis();
-                sdf = new SimpleDateFormat(patronFecha);
-                fechaActual = sdf.format(new Date(tFin));
                 tDelta = tFin - tInicio;
                 segTranscurridos = tDelta / 1000.0;
 
+                // Si se produce un récord añadimos el evento al calendario
                 agregarEventoCalendario(numCortes - 1, segTranscurridos);
-
-                // Obtenemos la BBDD
-                SQLiteDatabase db = dbHelper.getWritableDatabase();
-
-                // Creamos consulta
-                Cursor consultaRecord = db.query(BBDDEsquema.NOMBRE_TABLA, new String[]{"MIN(" + BBDDEsquema.COLUMNA_PUNTOS + ")"}, null, null,
-                        null, null, null);
-                consultaRecord.moveToFirst();  //ADD THIS!
-                int record = consultaRecord.getInt(0);
-
-                // Insertamos la puntuación en la BBDD
-                ContentValues valores = new ContentValues();
-                valores.put(BBDDEsquema.COLUMNA_FECHA, String.valueOf(fechaActual));
-                valores.put(BBDDEsquema.COLUMNA_NIVEL, numCortes - 1);
-                valores.put(BBDDEsquema.COLUMNA_PUNTOS, segTranscurridos);
-
-                long idNuevaFila = db.insert(BBDDEsquema.NOMBRE_TABLA, null, valores);
 
                 // Mostramos mensaje al completar puzzle
                 Toast.makeText(ActividadPrincipal.this, "¡Bravo! Tu tiempo " + String.format("%.2f", segTranscurridos).replace(".", ",") + "s", Toast.LENGTH_SHORT).show();
@@ -187,51 +152,100 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
                 pl.postDelayed(ActividadPrincipal.this, 3000);
             }
         });
-
     }
 
-    private int seleccionarImagenAleatoria(ArrayList<Integer> imagenes) {
-        Random rand = new Random();
-        int imagen = imagenes.get(rand.nextInt(imagenes.size()));
-        while (imagenesUsadas.contains(imagen)) {
-            imagen = imagenes.get(rand.nextInt(imagenes.size()));
-            Log.i("Usada", "Id: " + imagen);
+    // Vinculamos el servicio de música
+    private boolean mIsBound = false;
+    private ServicioMusica mServ;
+    private ServiceConnection Scon = new ServiceConnection() {
+
+        public void onServiceConnected(ComponentName name, IBinder binder) {
+            mServ = ((ServicioMusica.ServiceBinder) binder).getService();
         }
-        imagenesUsadas.add(imagen);
-        return imagen;
+
+        public void onServiceDisconnected(ComponentName name) {
+            mServ = null;
+        }
+    };
+
+    // Vinculamos el servicio
+    void doBindService() {
+        bindService(new Intent(this, ServicioMusica.class), Scon, Context.BIND_AUTO_CREATE);
+        mIsBound = true;
     }
 
-    public boolean checkPermissionREAD_EXTERNAL_STORAGE(
-            final Context context) {
+    // Desvinculamos el servicio
+    void doUnbindService() {
+        if (mIsBound) {
+            unbindService(Scon);
+            mIsBound = false;
+        }
+    }
+
+    // Este método reanuda la música
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        if (mServ != null) {
+            mServ.resumeMusic();
+        }
+    }
+
+    // Este método pone la música en pausa
+    @Override
+    protected void onPause() {
+        super.onPause();
+
+        // Detectamos la pausa de la pantalla
+        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        boolean isScreenOn = false;
+        if (pm != null) {
+            isScreenOn = pm.isScreenOn();
+        }
+
+        if (!isScreenOn) {
+            if (mServ != null) {
+                mServ.pauseMusic();
+            }
+        }
+    }
+
+    // Este método desvincula el servicio de música cuando no lo necesitamos
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+
+        // Desvinculamos el servicio de música
+        doUnbindService();
+        Intent music = new Intent();
+        music.setClass(this, ServicioMusica.class);
+        stopService(music);
+    }
+
+    // Este método comprueba si la aplicación tiene permisos
+    // para acceder al almacenamiento externo del dispositivo.
+    public boolean checkPermissionREAD_EXTERNAL_STORAGE(final Context context) {
         int currentAPIVersion = Build.VERSION.SDK_INT;
         if (currentAPIVersion >= android.os.Build.VERSION_CODES.M) {
-            if (ContextCompat.checkSelfPermission(context,
-                    Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                if (ActivityCompat.shouldShowRequestPermissionRationale(
-                        (Activity) context,
-                        Manifest.permission.READ_EXTERNAL_STORAGE)) {
-                    showDialog("External storage", context,
-                            Manifest.permission.READ_EXTERNAL_STORAGE);
-
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                if (ActivityCompat.shouldShowRequestPermissionRationale((Activity) context, Manifest.permission.READ_EXTERNAL_STORAGE)) {
+                    showDialog("External storage", context, Manifest.permission.READ_EXTERNAL_STORAGE);
                 } else {
-                    ActivityCompat
-                            .requestPermissions(
-                                    (Activity) context,
-                                    new String[]{Manifest.permission.READ_EXTERNAL_STORAGE},
-                                    MY_PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE);
+                    ActivityCompat.requestPermissions((Activity) context, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, MY_PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE);
                 }
                 return false;
             } else {
                 return true;
             }
-
         } else {
             return true;
         }
     }
 
-    public void showDialog(final String msg, final Context context,
-                           final String permission) {
+    // Este método muestra un diálogo indicando
+    // que se necesita dar permiso a la aplicación.
+    public void showDialog(final String msg, final Context context, final String permission) {
         AlertDialog.Builder alertBuilder = new AlertDialog.Builder(context);
         alertBuilder.setCancelable(true);
         alertBuilder.setTitle("Permission necessary");
@@ -249,48 +263,59 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode,
-                                           String[] permissions, int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         switch (requestCode) {
             case MY_PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE:
                 if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    // do your stuff
                 } else {
-                    Toast.makeText(this, "GET_ACCOUNTS Denied",
-                            Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "GET_ACCOUNTS Denied", Toast.LENGTH_SHORT).show();
                 }
                 break;
             default:
-                super.onRequestPermissionsResult(requestCode, permissions,
-                        grantResults);
+                super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
     }
 
+    // Esté método selecciona aleatoriamente una imagen de entre
+    // las que el usuario tiene almacenadas en el dispositivo y
+    // comprueba que no se haya seleccionado previamente en esa partida.
+    private int seleccionarImagenAleatoria(ArrayList<Integer> imagenes) {
+        Random rand = new Random();
+        int imagen = imagenes.get(rand.nextInt(imagenes.size()));
 
+        while (imagenesUsadas.contains(imagen)) {
+            imagen = imagenes.get(rand.nextInt(imagenes.size()));
+        }
+
+        imagenesUsadas.add(imagen);
+        return imagen;
+    }
+
+    // Este método agrega un evento al calendario si se ha producido un récord
+    // y en ese caso además envía una notificación.
     private void agregarEventoCalendario(int nivel, double tiempo) {
+
         if (recurperarPuntuacionesCalendario(nivel, tiempo)) {
             long fecha_record = System.currentTimeMillis();
             ContentResolver cr = getContentResolver();
             ContentValues values = new ContentValues();
+
             values.put(CalendarContract.Events.DTSTART, fecha_record);
             values.put(CalendarContract.Events.DTEND, fecha_record);
             values.put(CalendarContract.Events.TITLE, "TR - ¡Nuevo récord N" + nivel + "!");
             values.put(CalendarContract.Events.DESCRIPTION, String.format("%.2f", tiempo).replace(".", ","));
             values.put(CalendarContract.Events.CALENDAR_ID, 3);
             values.put(CalendarContract.Events.EVENT_TIMEZONE, "Confinado");
+
+            // Comprobamos si tenemos permisos de acceso al calendario
             if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
-                // TODO: Consider calling
-                //    ActivityCompat#requestPermissions
-                // here to request the missing permissions, and then overriding
-                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-                //                                          int[] grantResults)
-                // to handle the case where the user grants the permission. See the documentation
-                // for ActivityCompat#requestPermissions for more details.
                 return;
             }
+
             Uri uri = cr.insert(CalendarContract.Events.CONTENT_URI, values);
 
-            createNotificationChannel();
+            // Envía notificación
+            crearCanalNotificacion();
 
             NotificationCompat.Builder builder = new NotificationCompat.Builder(ActividadPrincipal.this, "CHANNEL_NEW_RECORD")
                     .setSmallIcon(R.drawable.notification_icon)
@@ -299,11 +324,12 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
 
             NotificationManagerCompat notificationManager = NotificationManagerCompat.from(ActividadPrincipal.this);
 
-            // notificationId is a unique int for each notification that you must define
             notificationManager.notify(1, builder.build());
         }
+
     }
 
+    // Este método comprueba si hay registros de la aplicación en el calendario
     private boolean recurperarPuntuacionesCalendario(int nivel, double tiempo) {
         ContentResolver contentResolver = getContentResolver();
         Uri.Builder builder = CalendarContract.Instances.CONTENT_URI.buildUpon();
@@ -326,8 +352,6 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
 
         while (eventCursor.moveToNext()) {
             final String title = eventCursor.getString(0);
-            final Date begin = new Date(eventCursor.getLong(1));
-            final Date end = new Date(eventCursor.getLong(2));
             final String description = eventCursor.getString(3);
 
             if (title.length() == 22 && title.substring(title.length() - 2, title.length() - 1).equals(Integer.toString(nivel))) {
@@ -338,7 +362,6 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
                     isRecord = false;
                 }
             }
-            Log.i("Cursor", "Title: " + title + "\tDescription: " + description + "\tBegin: " + begin + "\tEnd: " + end);
         }
 
         if (hayRegistros) {
@@ -348,31 +371,16 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
         }
     }
 
-    // Asociamos el servicio de música
-    private boolean mIsBound = false;
-    private ServicioMusica mServ;
-    private ServiceConnection Scon = new ServiceConnection() {
-
-        public void onServiceConnected(ComponentName name, IBinder
-                binder) {
-            mServ = ((ServicioMusica.ServiceBinder) binder).getService();
-        }
-
-        public void onServiceDisconnected(ComponentName name) {
-            mServ = null;
-        }
-    };
-
-    void doBindService() {
-        bindService(new Intent(this, ServicioMusica.class),
-                Scon, Context.BIND_AUTO_CREATE);
-        mIsBound = true;
-    }
-
-    void doUnbindService() {
-        if (mIsBound) {
-            unbindService(Scon);
-            mIsBound = false;
+    // Este método crea el canal que permite enviar las notificaciones de los récords.
+    private void crearCanalNotificacion() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            CharSequence name = getString(R.string.channel_name);
+            String description = getString(R.string.channel_description);
+            int importance = NotificationManager.IMPORTANCE_HIGH;
+            NotificationChannel channel = new NotificationChannel("CHANNEL_NEW_RECORD", name, importance);
+            channel.setDescription(description);
+            NotificationManager notificationManager = getSystemService(NotificationManager.class);
+            notificationManager.createNotificationChannel(channel);
         }
     }
 
@@ -394,43 +402,34 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
                 startActivity(ayuda);
                 return true;
             case R.id.camara:
-                mServ.pauseMusic();
+                // Se abre la funcionalidad de la cámara
+                mServ.pauseMusic(); // Pausamos la música mientras se hace la foto
                 ContentValues values = new ContentValues();
-                values.put(MediaStore.Images.Media.TITLE, "New Picture");
-                values.put(MediaStore.Images.Media.DESCRIPTION, "From your Camera");
+                values.put(MediaStore.Images.Media.TITLE, "Foto puzzle");
+                values.put(MediaStore.Images.Media.DESCRIPTION, "The Resolvers");
 
-                Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                // Ensure that there's a camera activity to handle the intent
-                if (takePictureIntent.resolveActivity(getPackageManager()) != null) {
-                    // Create the File where the photo should go
+                Intent intentoFoto = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
 
+                // Nos aseguramos que se ha abierto la actividad de la cámara
+                if (intentoFoto.resolveActivity(getPackageManager()) != null) {
+                    // Creamos el archivo donde irá la imagen
                     try {
-                        photoFile = createImageFile();
+                        archivoFoto = crearArchivoImagen();
                     } catch (IOException ex) {
-                        // Error occurred while creating the File
+                        // Ha ocurrido un error al crear el archivo
                     }
-                    // Continue only if the File was successfully created
-                    if (photoFile != null) {
-                        try {
-                            //Uri photoURI = FileProvider.getUriForFile(this, "edu.uoc.resolvers.fileprovider",photoFile);
-                            imageUri = getContentResolver().insert(
-                                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
-                            Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                            intent.putExtra(MediaStore.EXTRA_OUTPUT, imageUri);
-                            //takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI);
-                            startActivityForResult(intent, REQUEST_CAMERA);
-                        } catch (Exception e) {
-                            Log.e("Uri", e.getMessage());
-                        }
 
+                    if (archivoFoto != null) {
+                        imagenUri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+                        Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                        intent.putExtra(MediaStore.EXTRA_OUTPUT, imagenUri);
+                        startActivityForResult(intent, REQUEST_CAMERA);
                     }
                 }
-
-                //Toast.makeText(this, "Se abre la cámara", Toast.LENGTH_SHORT).show();
                 return true;
             case R.id.selector_musica:
                 // Se abre el selector de música
-                performFileSearch();
+                buscarPistaAudio();
                 return true;
             case R.id.checkable_menu:
                 isChecked = !item.isChecked();
@@ -442,169 +441,102 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
                     AudioManager amanager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
                     amanager.setStreamMute(AudioManager.STREAM_MUSIC, false);
                 }
-
                 return true;
             default:
                 return super.onOptionsItemSelected(item);
         }
     }
 
-    private File createImageFile() throws IOException {
-        // Create an image file name
+    // Este método crea el archivo en el que se guarda la foto que tomamamos con la cámara
+    private File crearArchivoImagen() throws IOException {
+        // Creamos un nombre para el archivo
         String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-        String imageFileName = "JPEG_" + timeStamp + "_";
-        File storageDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
-        String path = Environment.getExternalStorageDirectory().getAbsolutePath() + "/" + R.string.app_name + "/";
-        //File storageDir = new File("external/images/media/");
-        File image = File.createTempFile(
-                imageFileName,  /* prefix */
-                ".jpg",         /* suffix */
-                storageDir      /* directory */
-        );
+        String nombreArchivoImagen = "JPEG_" + timeStamp + "_";
+        File directorio = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
 
-        // Save a file: path for use with ACTION_VIEW intents
-        currentPhotoPath = image.getAbsolutePath();
-        return image;
+        // Creamos el archivo
+        File imagen = File.createTempFile(nombreArchivoImagen,".jpg", directorio);
+
+        return imagen;
     }
 
+    // Este método permite acceder al selector de archivos para que podamos elegir un tema de música.
+    public void buscarPistaAudio() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        // Filtramos para que solo muestre los archivos que se pueden abrir.
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        startActivityForResult(intent, READ_REQUEST_CODE);
+    }
 
     @Override
     public boolean onPrepareOptionsMenu(Menu menu) {
+        // Añadimos el checkbox para encender y apagar la música de fondo.
         MenuItem checkable = menu.findItem(R.id.checkable_menu);
         checkable.setChecked(isChecked);
         return true;
     }
 
-    /**
-     * Fires an intent to spin up the "file chooser" UI and select an image.
-     */
-    public void performFileSearch() {
-        // ACTION_OPEN_DOCUMENT is the intent to choose a file via the system's file
-        // browser.
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-
-        // Filter to only show results that can be "opened", such as a
-        // file (as opposed to a list of contacts or timezones)
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-
-        // Filter to show only images, using the image MIME data type.
-        // If one wanted to search for ogg vorbis files, the type would be "audio/ogg".
-        // To search for all documents available via installed storage providers,
-        // it would be "*/*".
-        intent.setType("*/*");
-
-        startActivityForResult(intent, READ_REQUEST_CODE);
-    }
-
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
 
-        // The ACTION_OPEN_DOCUMENT intent was sent with the request code
-        // READ_REQUEST_CODE. If the request code seen here doesn't match, it's the
-        // response to some other intent, and the code below shouldn't run at all.
-
         super.onActivityResult(requestCode, resultCode, data);
+
         if (requestCode == READ_REQUEST_CODE && resultCode == Activity.RESULT_OK) {
-            // The document selected by the user won't be returned in the intent.
-            // Instead, a URI to that document will be contained in the return intent
-            // provided to this method as a parameter.
-            // Pull that URI using resultData.getData().
-            Uri uri = null;
+            // Establecemos la nueva música de fondo
+            Uri uri;
+
             if (data != null) {
                 uri = data.getData();
                 ServicioMusica.audioUri = uri;
                 Intent broadcastIntent = new Intent(Broadcast_PLAY_NEW_AUDIO);
                 sendBroadcast(broadcastIntent);
             }
-        } else if (requestCode == REQUEST_CAMERA && resultCode == RESULT_OK) {
 
-            Bitmap photo = null;
+        } else if (requestCode == REQUEST_CAMERA && resultCode == RESULT_OK) {
+            // Sustituimos la imagen del puzzle por la foto hecha con la cámara
+            Bitmap foto = null;
+
             try {
-                photo = MediaStore.Images.Media.getBitmap(
-                        getContentResolver(), imageUri);
+                foto = MediaStore.Images.Media.getBitmap(getContentResolver(), imagenUri);
             } catch (IOException e) {
                 e.printStackTrace();
             }
-            selectedImage = getResizedBitmap(photo, 900);
 
-
-            try {
-                //Write file
-                String filename = "/file_name";
-                String dir_path = "Directory_Path";
-                File file = new File(dir_path);
-                file.mkdir();
-                FileOutputStream fileOutputStream = new FileOutputStream(dir_path + filename);
-                selectedImage.compress(Bitmap.CompressFormat.PNG, 100, fileOutputStream);
-
-                //Cleanup
-                fileOutputStream.close();
-
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            imagen = getLastImageId();
+            // Obtenemos el id de la foto tomada con la cámara
+            imagen = obtenerIdUltimaImagen();
             imagenesUsadas.add(imagen);
             try {
                 pl.establecerImagen(imagen, numCortes);
             } catch (IOException e) {
                 e.printStackTrace();
             }
-            Log.i("Camera", "Id:  " + imagen);
+
             mServ.resumeMusic();
         }
     }
 
-    //Resize Bitmap
-    public Bitmap getResizedBitmap(Bitmap image, int maxSize) {
-        int width = image.getWidth();
-        int height = image.getHeight();
-
-        float bitmapRatio = (float) width / (float) height;
-        if (bitmapRatio > 1) {
-            width = maxSize;
-            height = (int) (width / bitmapRatio);
-        } else {
-            height = maxSize;
-            width = (int) (height * bitmapRatio);
-        }
-        return Bitmap.createScaledBitmap(image, width, height, true);
-    }
-
-    private int getLastImageId() {
-        final String[] imageColumns = {MediaStore.Images.Media._ID,
-                MediaStore.Images.Media.DATA};
+    // Este método permite obtener el id de la última imagen tomada con la cámara
+    private int obtenerIdUltimaImagen() {
+        final String[] imageColumns = {MediaStore.Images.Media._ID, MediaStore.Images.Media.DATA};
         final String imageOrderBy = MediaStore.Images.Media._ID + " DESC";
-        Cursor imageCursor = managedQuery(
-                MediaStore.Images.Media.EXTERNAL_CONTENT_URI, imageColumns,
-                null, null, imageOrderBy);
+        Cursor imageCursor = getApplicationContext().getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, imageColumns, null, null, imageOrderBy);
+
         if (imageCursor.moveToFirst()) {
-            int id = imageCursor.getInt(imageCursor
-                    .getColumnIndex(MediaStore.Images.Media._ID));
-            String fullPath = imageCursor.getString(imageCursor
-                    .getColumnIndex(MediaStore.Images.Media.DATA));
-            Log.d(getClass().getSimpleName(), "getLastImageId::id " + id);
-            Log.d(getClass().getSimpleName(), "getLastImageId::path "
-                    + fullPath);
+            int id = imageCursor.getInt(imageCursor.getColumnIndex(MediaStore.Images.Media._ID));
             imageCursor.close();
             return id;
         } else {
             return 0;
         }
-    }
 
-    public Uri getImageUri(Context inContext, Bitmap inImage) {
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        inImage.compress(Bitmap.CompressFormat.JPEG, 100, bytes);
-        String path = MediaStore.Images.Media.insertImage(inContext.getContentResolver(), inImage, null, null);
-        return Uri.parse(path);
     }
 
     @Override
     public void run() {
         numCortes++;
         imagen = seleccionarImagenAleatoria(imagenesDisponibles);
-        // imagen++;
+
         // Si llegamos al último puzzle muestra el dialogo del fin del juego
         // Si no carga el siguiente puzzle
         if (numCortes > NIVELES + 1) {
@@ -629,7 +561,6 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
                             public void onClick(DialogInterface dialog, int which) {
                                 numCortes = 2;
                                 imagen = seleccionarImagenAleatoria(imagenesDisponibles);
-                                //imagen = R.mipmap.img_02;
                                 try {
                                     pl.establecerImagen(imagen, numCortes);
                                 } catch (IOException e) {
@@ -646,63 +577,5 @@ public class ActividadPrincipal extends AppCompatActivity implements Runnable {
                         finish();
                     }
                 }).show();
-    }
-
-    // Este método reanuda la música
-    @Override
-    protected void onResume() {
-        super.onResume();
-
-        if (mServ != null) {
-            mServ.resumeMusic();
-        }
-    }
-
-    // Este método pone la música en pausa
-    @Override
-    protected void onPause() {
-        super.onPause();
-
-        //Detect idle screen
-        PowerManager pm = (PowerManager)
-                getSystemService(Context.POWER_SERVICE);
-        boolean isScreenOn = false;
-        if (pm != null) {
-            isScreenOn = pm.isScreenOn();
-        }
-
-        if (!isScreenOn) {
-            if (mServ != null) {
-                mServ.pauseMusic();
-            }
-        }
-    }
-
-    // Este método desasocia el servicio de música cuando no lo necesitamos
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-
-        //UNBIND music service
-        doUnbindService();
-        Intent music = new Intent();
-        music.setClass(this, ServicioMusica.class);
-        stopService(music);
-    }
-
-    private void createNotificationChannel() {
-        // Create the NotificationChannel, but only on API 26+ because
-        // the NotificationChannel class is new and not in the support library
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            CharSequence name = getString(R.string.channel_name);
-            String description = getString(R.string.channel_description);
-            int importance = NotificationManager.IMPORTANCE_HIGH;
-            NotificationChannel channel = new NotificationChannel("CHANNEL_NEW_RECORD", name, importance);
-            channel.setDescription(description);
-            // Register the channel with the system; you can't change the importance
-            // or other notification behaviors after this
-            NotificationManager notificationManager = getSystemService(NotificationManager.class);
-            notificationManager.createNotificationChannel(channel);
-        }
     }
 }

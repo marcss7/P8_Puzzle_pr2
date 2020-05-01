@@ -2,7 +2,6 @@ package edu.uoc.resolvers;
 
 import android.content.ContentResolver;
 import android.content.Context;
-import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
@@ -14,14 +13,12 @@ import android.os.Build;
 import android.provider.MediaStore;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
-import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
-import android.widget.Toast;
 
 import androidx.customview.widget.ViewDragHelper;
 
@@ -59,10 +56,13 @@ public class PuzzleLayout extends RelativeLayout {
     }
 
     private void init() {
+
+        // Declaramos las constantes que van a almacenar los efectos sonoros.
         final SoundPool soundPool;
         final int deslizar;
         final int exito;
 
+        // Usamos SoundPool para reproducir los efectos de sonoros.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             AudioAttributes audioAttributes = new AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
@@ -186,10 +186,12 @@ public class PuzzleLayout extends RelativeLayout {
                 releasedChild.setLayoutParams(lp);
                 invalidate();
 
+                // Se reproduce el sonido de deslizamiento de la pieza
                 soundPool.play(deslizar, 1, 1, 1, 0, 1);
 
                 if(estaCompleto){
                     piezaVacia.setVisibility(VISIBLE);
+                    // Se reproduce el sonido de finalización del puzzle
                     soundPool.play(exito, 1, 1, 1, 0, 1);
                     occ.onComplete();
                 }
@@ -221,7 +223,6 @@ public class PuzzleLayout extends RelativeLayout {
         this.numCortes = numCortes;
         this.idImagen = idImagen;
 
-
         if(anchuraImagen != 0 && alturaImagen != 0){
             crearPiezas();
         }
@@ -236,11 +237,10 @@ public class PuzzleLayout extends RelativeLayout {
         BitmapFactory.Options options = new BitmapFactory.Options();
         options.inDensity = dm.densityDpi;
 
-        // <<<<<<<<<<<<<<---------------------------------->>>>>>>>>>>>>>
+        // Obtenemos la imagen en función de su id de los recursos externos
         ContentResolver cr = this.getContext().getContentResolver();
         Uri imageUri = Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, String.valueOf(idImagen));
         Bitmap resource = MediaStore.Images.Media.getBitmap(cr, imageUri);
-        //Bitmap resource = BitmapFactory.decodeResource(getResources(), idImagen, options);
         Bitmap bitmap = escalarImagen(resource, anchuraImagen, alturaImagen);
         resource.recycle();
 

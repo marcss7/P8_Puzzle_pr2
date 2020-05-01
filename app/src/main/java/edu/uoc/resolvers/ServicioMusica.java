@@ -12,6 +12,10 @@ import android.os.Binder;
 import android.os.IBinder;
 import android.widget.Toast;
 
+/*
+    Esta clase representa el servicio que se va a encargar de
+    gestionar la reproducción de la música de fondo de la aplicación.
+ */
 public class ServicioMusica extends Service implements MediaPlayer.OnErrorListener {
 
     private final IBinder mBinder = new ServiceBinder();
@@ -37,7 +41,6 @@ public class ServicioMusica extends Service implements MediaPlayer.OnErrorListen
     public void onCreate() {
         super.onCreate();
 
-        // mPlayer = MediaPlayer.create(this, R.raw.solve_the_puzzle);
         if (audioUri != null) {
             mPlayer = MediaPlayer.create(this, audioUri);
         } else {
@@ -71,6 +74,7 @@ public class ServicioMusica extends Service implements MediaPlayer.OnErrorListen
         return START_NOT_STICKY;
     }
 
+    // Este método pausa la música
     public void pauseMusic() {
         if (mPlayer != null) {
             if (mPlayer.isPlaying()) {
@@ -80,6 +84,7 @@ public class ServicioMusica extends Service implements MediaPlayer.OnErrorListen
         }
     }
 
+    // Este método reinicia la reproducción de la música
     public void resumeMusic() {
         if (mPlayer != null) {
             if (!mPlayer.isPlaying()) {
@@ -89,13 +94,14 @@ public class ServicioMusica extends Service implements MediaPlayer.OnErrorListen
         }
     }
 
+    // Este método inicia la reproducción de la música
     public void startMusic() {
         if (audioUri != null) {
             mPlayer = MediaPlayer.create(this, audioUri);
         } else {
             mPlayer = MediaPlayer.create(this, R.raw.solve_the_puzzle);
         }
-        //mPlayer = MediaPlayer.create(this, R.raw.solve_the_puzzle);
+
         mPlayer.setOnErrorListener(this);
 
         if (mPlayer != null) {
@@ -103,9 +109,9 @@ public class ServicioMusica extends Service implements MediaPlayer.OnErrorListen
             mPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
             mPlayer.start();
         }
-
     }
 
+    // Este método detiene la música
     public void stopMusic() {
         if (mPlayer != null) {
             mPlayer.stop();
@@ -128,6 +134,7 @@ public class ServicioMusica extends Service implements MediaPlayer.OnErrorListen
         unregisterReceiver(playNewAudio);
     }
 
+    // Esté metodo detecta si se ha producido un error al reproducir la música de fondo.
     public boolean onError(MediaPlayer mp, int what, int extra) {
         Toast.makeText(this, "Error en reproductor", Toast.LENGTH_SHORT).show();
         if (mPlayer != null) {
@@ -141,18 +148,18 @@ public class ServicioMusica extends Service implements MediaPlayer.OnErrorListen
         return false;
     }
 
+    // Este método se encarga de gestiionar la reproducción
+    // del nuevo audio seleccionado por el usuario.
     private BroadcastReceiver playNewAudio = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            //A PLAY_NEW_AUDIO action received
-            //reset mediaPlayer to play the new Audio
+            // Resetea el mediaplayer para reproducir el nuevo audio
             stopMusic();
             startMusic();
         }
     };
 
     private void register_playNewAudio() {
-        //Register playNewMedia receiver
         IntentFilter filter = new IntentFilter(ActividadPrincipal.Broadcast_PLAY_NEW_AUDIO);
         registerReceiver(playNewAudio, filter);
     }
